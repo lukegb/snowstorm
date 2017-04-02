@@ -81,3 +81,50 @@ func TestReader(t *testing.T) {
 		})
 	}
 }
+
+func TestReaderBadMagic(t *testing.T) {
+	path := filepath.Join("testdata", "badmagic.blte")
+	f, err := os.Open(path)
+	defer f.Close()
+	if err != nil {
+		t.Errorf("os.Open(%q): %v", path, err)
+		return
+	}
+
+	r := NewReader(f)
+	_, err = ioutil.ReadAll(r)
+	if err != ErrBadMagic {
+		t.Errorf("ioutil.ReadAll: %v; want %v", err, ErrBadMagic)
+		return
+	}
+}
+
+func TestReaderErrors(t *testing.T) {
+	for _, test := range []string{
+		"badchecksum.blte",
+		"badchunkcount.blte",
+		"badcompression.blte",
+		"badzlib.blte",
+		"badzlibtrail.blte",
+		"truncatedheader.blte",
+		"truncatedbiggerheader.blte",
+		"truncatedchunkentry.blte",
+	} {
+		t.Run(test, func(t *testing.T) {
+			path := filepath.Join("testdata", test)
+			f, err := os.Open(path)
+			defer f.Close()
+			if err != nil {
+				t.Errorf("os.Open(%q): %v", path, err)
+				return
+			}
+
+			r := NewReader(f)
+			_, err = ioutil.ReadAll(r)
+			if err == nil {
+				t.Errorf("ioutil.ReadAll: %v; want error", err)
+				return
+			}
+		})
+	}
+}

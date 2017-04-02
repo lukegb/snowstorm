@@ -21,6 +21,70 @@ import zlib
 with open('badmagic.blte', 'wb') as f:
     f.write(b'XLTE\0\0\0\0boo')
 
+with open('truncatedheader.blte', 'wb') as f:
+    f.write(b'BLTE\0')
+
+with open('truncatedbiggerheader.blte', 'wb') as f:
+    f.write(b'BLTE' + struct.pack('>I', 0x5) + b'\0')
+
+with open('truncatedchunkentry.blte', 'wb') as f:
+    content = b'this BLTE file doesn\'t actually exist, mostly'
+    cie = struct.pack('>II', len(content)+1, len(content)) + hashlib.md5(b'N' + content).digest()
+    ci = struct.pack('>HH', 0x0, 0x1) + cie[:2]
+
+    f.write(b'BLTE' + struct.pack('>I', len(ci) + 0x8))
+    f.write(ci)
+
+with open('badchecksum.blte', 'wb') as f:
+    content = b'this BLTE file has a header with a bad checksum'
+    cie = struct.pack('>II', len(content)+1, len(content)) + hashlib.md5(b'nope').digest()
+    ci = struct.pack('>HH', 0x0, 0x1) + cie
+
+    f.write(b'BLTE' + struct.pack('>I', len(ci) + 0x8))
+    f.write(ci)
+    f.write(b'N' + content)
+
+with open('badcompression.blte', 'wb') as f:
+    content = b'this BLTE file has a header with an unsupported compression method'
+    compressed_content = b'A' + content
+    cie = struct.pack('>II', len(compressed_content), len(content)) + hashlib.md5(compressed_content).digest()
+    ci = struct.pack('>HH', 0x0, 0x1) + cie
+
+    f.write(b'BLTE' + struct.pack('>I', len(ci) + 0x8))
+    f.write(ci)
+    f.write(compressed_content)
+
+with open('badzlib.blte', 'wb') as f:
+    content = b'this BLTE file has a header with corrupt zlib data'
+    compressed_content = b'Z' + content
+    cie = struct.pack('>II', len(compressed_content), len(content)) + hashlib.md5(compressed_content).digest()
+    ci = struct.pack('>HH', 0x0, 0x1) + cie
+
+    f.write(b'BLTE' + struct.pack('>I', len(ci) + 0x8))
+    f.write(ci)
+    f.write(compressed_content)
+
+with open('badzlibtrail.blte', 'wb') as f:
+    content = b'this BLTE file has a header with corrupt zlib data' * 20
+    compressed_content = b'Z' + zlib.compress(content)
+    compressed_content = compressed_content[:60] + compressed_content[61:]
+    cie = struct.pack('>II', len(compressed_content), len(content)) + hashlib.md5(compressed_content).digest()
+    ci = struct.pack('>HH', 0x0, 0x1) + cie
+
+    f.write(b'BLTE' + struct.pack('>I', len(ci) + 0x8))
+    f.write(ci)
+    f.write(compressed_content)
+
+with open('badchunkcount.blte', 'wb') as f:
+    content = b'this BLTE file has a header which states the incorrect chunk count'
+    compressed_content = b'N' + content
+    cie = struct.pack('>II', len(compressed_content), len(content)) + hashlib.md5(compressed_content).digest()
+    ci = struct.pack('>HH', 0x0, 0x2) + cie
+
+    f.write(b'BLTE' + struct.pack('>I', len(ci) + 0x8))
+    f.write(ci)
+    f.write(compressed_content)
+
 with open('noheader.uncompressed.blte', 'wb') as f:
     f.write(b'BLTE\0\0\0\0')
     f.write(b'N')
