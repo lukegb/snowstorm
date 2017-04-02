@@ -107,6 +107,19 @@ func setValue(f reflect.Value, value string) error {
 			return err
 		}
 		f.SetUint(v)
+	case f.Kind() == reflect.Struct:
+		bits := strings.Split(value, " ")
+		if len(bits) != f.NumField() {
+			return fmt.Errorf("keyvalue: unpacking into embedded struct of different length")
+		}
+		for n, bit := range bits {
+			fv := f.Field(n)
+			if err := setValue(fv, bit); err != nil {
+				return err
+			}
+		}
+	default:
+		return fmt.Errorf("keyvalue: don't know how to unpack into kind %v", f.Kind())
 	}
 	return nil
 }

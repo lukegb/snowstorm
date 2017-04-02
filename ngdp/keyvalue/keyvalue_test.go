@@ -8,12 +8,17 @@ import (
 )
 
 func TestDecode(t *testing.T) {
+	type Embedded struct {
+		Left  string
+		Right string
+	}
 	type T struct {
 		String               string
 		StringWithCustomName string `keyvalue:"swcn"`
 		SliceOfString        []string
 		Uint                 uint64
 		Int                  int64
+		Embedded             Embedded
 		unexported           string
 	}
 
@@ -24,6 +29,7 @@ slice-of-string = blah1 blah2 blah3 blah4
 uint = 65536
 int = -300
 ignored-field = ignored
+embedded = left right
 `
 	want := T{
 		String:               "blah",
@@ -31,7 +37,12 @@ ignored-field = ignored
 		SliceOfString:        []string{"blah1", "blah2", "blah3", "blah4"},
 		Uint:                 65536,
 		Int:                  -300,
+		Embedded: Embedded{
+			Left:  "left",
+			Right: "right",
+		},
 	}
+
 	var got T
 	if err := Decode(strings.NewReader(in), &got); err != nil {
 		t.Errorf("Decode: %v", err)
@@ -69,5 +80,32 @@ func TestDecodeErrorDecodingInt(t *testing.T) {
 		if err := Decode(strings.NewReader(test), &got); err == nil {
 			t.Errorf("Decode: %v; want error", err)
 		}
+	}
+}
+
+func TestDecodeErrorEmbeddedStruct(t *testing.T) {
+	type T struct {
+		Embedded struct {
+			One int64
+		}
+	}
+
+	var got T
+	if err := Decode(strings.NewReader("embedded = one two three"), &got); err == nil {
+		t.Errorf("Decode: %v; want error", err)
+	}
+	if err := Decode(strings.NewReader("embedded = one"), &got); err == nil {
+		t.Errorf("Decode: %v; want error", err)
+	}
+}
+
+func TestDecodeErrorUnknownType(t *testing.T) {
+	type T struct {
+		Interface interface{}
+	}
+
+	var got T
+	if err := Decode(strings.NewReader("interface = 5"), &got); err == nil {
+		t.Errorf("Decode: %v; want error", err)
 	}
 }
