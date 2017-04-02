@@ -238,6 +238,8 @@ func (d *Decoder) Decode(s interface{}) error {
 				bits := strings.Split(tag, ",")
 				columnName = bits[0]
 				columnDelimiter = bits[1]
+			} else {
+				columnName = tag
 			}
 		}
 

@@ -93,7 +93,7 @@ func TestReadHeaderErrors(t *testing.T) {
 func TestDecode(t *testing.T) {
 	type S struct {
 		Name       string
-		Patho      string   `configtable:"Patho"`
+		Path       string   `configtable:"Patho"`
 		Hosts      []string `configtable:"Hosts, "`
 		Delimited  []string `configtable:"Delimit,-"`
 		unexported string   `configtable:"Patho"`
