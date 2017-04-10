@@ -1,0 +1,3 @@
+[submodule "ngdp/mndx/CascLib"]
+	path = ngdp/mndx/CascLib
+	url = git://github.com/ladislav-zezula/CascLib.git
