@@ -23,6 +23,8 @@ import (
 	"testing"
 )
 
+type MaybeAString string
+
 func TestDecode(t *testing.T) {
 	type Embedded struct {
 		Left  string
@@ -32,6 +34,7 @@ func TestDecode(t *testing.T) {
 		String               string
 		StringWithCustomName string `keyvalue:"swcn"`
 		SliceOfString        []string
+		SliceOfMaybeAString  []MaybeAString
 		Uint                 uint64
 		Int                  int64
 		Embedded             Embedded
@@ -42,6 +45,7 @@ func TestDecode(t *testing.T) {
 string = blah
 swcn = blah2
 slice-of-string = blah1 blah2 blah3 blah4
+slice-of-maybe-a-string = blah1 blah2 blah3 blah4
 uint = 65536
 int = -300
 ignored-field = ignored
@@ -51,6 +55,7 @@ embedded = left right
 		String:               "blah",
 		StringWithCustomName: "blah2",
 		SliceOfString:        []string{"blah1", "blah2", "blah3", "blah4"},
+		SliceOfMaybeAString:  []MaybeAString{"blah1", "blah2", "blah3", "blah4"},
 		Uint:                 65536,
 		Int:                  -300,
 		Embedded: Embedded{

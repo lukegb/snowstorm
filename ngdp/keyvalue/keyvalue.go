@@ -110,7 +110,12 @@ func setValue(f reflect.Value, value string) error {
 		f.SetString(value)
 	case f.Kind() == reflect.Slice && f.Type().Elem().Kind() == reflect.String:
 		bits := strings.Split(value, " ")
-		f.Set(reflect.ValueOf(bits))
+
+		slice := reflect.MakeSlice(f.Type(), len(bits), len(bits))
+		for n, v := range bits {
+			slice.Index(n).SetString(v)
+		}
+		f.Set(slice)
 	case f.Kind() >= reflect.Int && f.Kind() <= reflect.Int64:
 		v, err := strconv.ParseInt(value, 10, 64)
 		if err != nil {
