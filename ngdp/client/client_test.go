@@ -44,6 +44,18 @@ func (f *fakeGetter) Get(url string) (*http.Response, error) {
 	return resp, nil
 }
 
+func (f *fakeGetter) Do(req *http.Request) (*http.Response, error) {
+	url := req.URL.String()
+	f.requests = append(f.requests, url)
+
+	resp := f.responses[url]
+	if resp == nil {
+		return nil, fmt.Errorf("response for %q not stored", url)
+	}
+
+	return resp, nil
+}
+
 type fakeMapper struct {
 	responses map[ngdp.ContentHash]ngdp.CDNHash
 	requests  []ngdp.ContentHash
@@ -91,6 +103,8 @@ func TestNewClient(t *testing.T) {
 }
 
 func testClient() (*Client, *fakeGetter) {
+	isInTest = true
+
 	fg := &fakeGetter{
 		responses: make(map[string]*http.Response),
 	}
@@ -140,6 +154,12 @@ build-product = Hero
 build-replay-hash = c0fd005923f9476b00c99475a07c08c6
 build-t1-manifest-version = 2
 build-uid = hero
+`)
+	fg.responses["http://region.distro.example.com/tpr/Hero-Live-a/config/ff/be/ffbec782d8a2222cbaf38f2968c7ba9c"] = fakeHTTPResponse(http.StatusOK, nil, `
+# CDN Configuration
+
+archives = 002b6d5f5f572534f80f1191fadcf199
+patch-archives = 03619da1c909c7a4447f16ac7d093098
 `)
 	fg.responses["http://region.distro.example.com/tpr/Hero-Live-a/data/15/35/1535a825a3153660397b7fc362db6317"] = fakeHTTPResponse(http.StatusOK, nil, "")
 

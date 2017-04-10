@@ -17,9 +17,13 @@ limitations under the License.
 package client
 
 import (
+	"encoding/binary"
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/lukegb/snowstorm/blte"
 	"github.com/lukegb/snowstorm/ngdp"
@@ -31,6 +35,7 @@ import (
 // getter is used in tests for mocking out http.Client.
 type getter interface {
 	Get(url string) (*http.Response, error)
+	Do(req *http.Request) (*http.Response, error)
 }
 
 // mapper is used in tests for mocking out encoding.Mapper.
@@ -43,6 +48,9 @@ var (
 	parseEncoding = func(r io.Reader) (mapper, error) {
 		return encoding.NewMapper(blte.NewReader(r))
 	}
+
+	// XXX(lukegb): remove this bodge of a hack
+	isInTest = false
 )
 
 var (
@@ -92,17 +100,34 @@ type BuildConfig struct {
 	PatchConfig ngdp.CDNHash
 }
 
+type CDNConfig struct {
+	Archives     []ngdp.CDNHash
+	ArchiveGroup ngdp.CDNHash
+
+	PatchArchives     []ngdp.CDNHash
+	PatchArchiveGroup ngdp.CDNHash
+}
+
 type Client struct {
 	program ngdp.ProgramCode
 	region  ngdp.Region
 
 	client getter
 
-	inited            bool
-	cachedCDN         *CDNInfo
-	cachedVersion     *VersionInfo
-	cachedBuildConfig *BuildConfig
-	cachedEncoding    mapper
+	inited               bool
+	cachedCDN            *CDNInfo
+	cachedVersion        *VersionInfo
+	cachedBuildConfig    *BuildConfig
+	cachedCDNConfig      *CDNConfig
+	cachedEncoding       mapper
+	cachedArchiveIndices map[ngdp.CDNHash]archiveIndexEntry
+}
+
+type archiveIndexEntry struct {
+	fileCDNHash    ngdp.CDNHash
+	archiveCDNHash ngdp.CDNHash
+	size           uint32
+	offset         uint32
 }
 
 // New creates a new Client for the given program using the default region.
@@ -182,6 +207,15 @@ func (c *Client) BuildConfig() (BuildConfig, error) {
 	return *c.cachedBuildConfig, nil
 }
 
+// CDNConfig returns information about the current build config for the currently selected region.
+func (c *Client) CDNConfig() (CDNConfig, error) {
+	if err := c.Init(); err != nil {
+		return CDNConfig{}, err
+	}
+
+	return *c.cachedCDNConfig, nil
+}
+
 // Init retrieves and caches a CDN and Version information for the currently selected region.
 //
 // If not called explicitly, it will be invoked automatically when necessary.
@@ -190,13 +224,23 @@ func (c *Client) Init() error {
 		return nil
 	}
 
-	cdns, err := c.CDNs()
-	if err != nil {
-		return err
-	}
+	var eg errgroup.Group
 
-	versions, err := c.Versions()
-	if err != nil {
+	var cdns []CDNInfo
+	var versions []VersionInfo
+
+	eg.Go(func() error {
+		var err error
+		cdns, err = c.CDNs()
+		return err
+	})
+	eg.Go(func() error {
+		var err error
+		versions, err = c.Versions()
+		return err
+	})
+
+	if err := eg.Wait(); err != nil {
 		return err
 	}
 
@@ -225,43 +269,151 @@ func (c *Client) Init() error {
 	c.cachedCDN = cdn
 	c.cachedVersion = version
 
-	r, err := c.fetchCDNHash(ngdp.ContentTypeConfig, version.BuildConfig)
-	if err != nil {
-		return fmt.Errorf("ngdp: downloading buildconfig: %v", err)
-	}
-	defer r.Close()
 	var buildConfig BuildConfig
-	if err := keyvalue.Decode(r, &buildConfig); err != nil {
-		return fmt.Errorf("ngdp: parsing buildconfig: %v", err)
+	var cdnConfig CDNConfig
+	var mapper mapper
+	eg.Go(func() error {
+		r, err := c.fetchCDNHash(ngdp.ContentTypeConfig, version.BuildConfig)
+		if err != nil {
+			return fmt.Errorf("ngdp: downloading buildconfig: %v", err)
+		}
+		defer r.Close()
+		if err := keyvalue.Decode(r, &buildConfig); err != nil {
+			return fmt.Errorf("ngdp: parsing buildconfig: %v", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		r, err := c.fetchCDNHash(ngdp.ContentTypeConfig, version.CDNConfig)
+		if err != nil {
+			return fmt.Errorf("ngdp: downloading cdnconfig: %v", err)
+		}
+		defer r.Close()
+		if err := keyvalue.Decode(r, &cdnConfig); err != nil {
+			return fmt.Errorf("ngdp: parsing cdnconfig: %v", err)
+		}
+		return nil
+	})
+
+	if err := eg.Wait(); err != nil {
+		return err
 	}
 
-	c.cachedBuildConfig = &buildConfig
+	eg.Go(func() error {
+		r, err := c.fetchCDNHash(ngdp.ContentTypeData, buildConfig.Encoding.CDNHash)
+		if err != nil {
+			return fmt.Errorf("ngdp: downloading encoding: %v", err)
+		}
+		defer r.Close()
+		mapper, err = parseEncoding(r)
+		if err != nil {
+			return fmt.Errorf("ngdp: parsing encoding: %v", err)
+		}
+		return nil
+	})
 
-	r, err = c.fetchCDNHash(ngdp.ContentTypeData, buildConfig.Encoding.CDNHash)
-	if err != nil {
-		return fmt.Errorf("ngdp: downloading encoding: %v", err)
-	}
-	defer r.Close()
-	mapper, err := parseEncoding(r)
-	if err != nil {
-		return fmt.Errorf("ngdp: parsing encoding: %v", err)
+	if err := eg.Wait(); err != nil {
+		return err
 	}
 
 	c.inited = true
 	c.cachedEncoding = mapper
+	c.cachedBuildConfig = &buildConfig
+	c.cachedCDNConfig = &cdnConfig
+
+	if err := c.initArchiveIndices(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
-func (c *Client) cdnURLs(contentType ngdp.ContentType, cdnHash ngdp.CDNHash) ([]string, error) {
+// TODO(lukegb): move this somewhere more appropriate
+func (c *Client) initArchiveIndices() error {
+	if isInTest {
+		return nil
+	}
+
+	var locMapLock sync.Mutex
+	locMap := make(map[ngdp.CDNHash]archiveIndexEntry)
+
+	var g errgroup.Group
+
+	for _, archiveCDNHash := range c.cachedCDNConfig.Archives {
+		archiveCDNHash := archiveCDNHash
+		g.Go(func() error {
+			r, err := c.fetchCDNHashWithSuffix(ngdp.ContentTypeData, archiveCDNHash, ".index")
+			if err != nil {
+				return err
+			}
+			defer r.Close()
+
+			chunk := make([]byte, 4096)
+			for {
+				if _, err := io.ReadFull(r, chunk); err != nil {
+					if err == io.ErrUnexpectedEOF {
+						return nil
+					}
+					return err
+				}
+
+				locMapLock.Lock()
+
+				for n := 0; n < 170; n++ {
+					hdr := chunk[n*0x18 : (n+1)*0x18]
+
+					// check if we're at the end
+					isAllZeros := true
+					for x := 0; x < 0x18; x++ {
+						if hdr[x] != 0 {
+							isAllZeros = false
+							break
+						}
+					}
+					if isAllZeros {
+						break
+					}
+
+					cdnHash := ngdp.CDNHash(fmt.Sprintf("%0x", hdr[0x0:0x10]))
+					size := binary.BigEndian.Uint32(hdr[0x10:0x14])
+					offset := binary.BigEndian.Uint32(hdr[0x14:0x18])
+
+					locMap[cdnHash] = archiveIndexEntry{
+						fileCDNHash:    cdnHash,
+						archiveCDNHash: archiveCDNHash,
+						size:           size,
+						offset:         offset,
+					}
+				}
+
+				locMapLock.Unlock()
+			}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return err
+	}
+
+	c.cachedArchiveIndices = locMap
+
+	return nil
+}
+
+func (c *Client) cdnURLs(contentType ngdp.ContentType, cdnHash ngdp.CDNHash, suffix string) ([]string, error) {
 	urls := make([]string, len(c.cachedCDN.Hosts))
 	for n, host := range c.cachedCDN.Hosts {
-		urls[n] = fmt.Sprintf("http://%s/%s/%s/%s/%s/%s", host, c.cachedCDN.Path, contentType, cdnHash[0:2], cdnHash[2:4], cdnHash)
+		urls[n] = fmt.Sprintf("http://%s/%s/%s/%s/%s/%s%s", host, c.cachedCDN.Path, contentType, cdnHash[0:2], cdnHash[2:4], cdnHash, suffix)
 	}
 	return urls, nil
 }
 
 func (c *Client) fetchCDNHash(contentType ngdp.ContentType, cdnHash ngdp.CDNHash) (io.ReadCloser, error) {
-	urls, err := c.cdnURLs(contentType, cdnHash)
+	return c.fetchCDNHashWithSuffix(contentType, cdnHash, "")
+}
+
+func (c *Client) fetchCDNHashWithSuffix(contentType ngdp.ContentType, cdnHash ngdp.CDNHash, suffix string) (io.ReadCloser, error) {
+	urls, err := c.cdnURLs(contentType, cdnHash, suffix)
 	if err != nil {
 		return nil, err
 	}
@@ -292,6 +444,31 @@ func (c *Client) Fetch(h ngdp.ContentHash) (io.ReadCloser, error) {
 	cdnHash, err := c.cachedEncoding.ToCDNHash(h)
 	if err != nil {
 		return nil, err
+	}
+
+	// check to see if this is contained inside an archive
+	if archEntry, ok := c.cachedArchiveIndices[cdnHash]; ok {
+		urls, err := c.cdnURLs(ngdp.ContentTypeData, archEntry.archiveCDNHash, "")
+		if err != nil {
+			return nil, err
+		}
+
+		req, err := http.NewRequest("GET", urls[0], nil)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Add("Range", fmt.Sprintf("bytes=%d-%d", archEntry.offset, archEntry.offset+archEntry.size))
+
+		resp, err := c.client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode != http.StatusPartialContent {
+			return nil, fmt.Errorf("ngdq: server returned status: %v", resp.Status)
+		}
+
+		return resp.Body, nil
 	}
 
 	return c.fetchCDNHash(ngdp.ContentTypeData, cdnHash)
