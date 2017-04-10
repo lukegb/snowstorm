@@ -14,13 +14,13 @@ import (
 )
 
 type File struct {
-	name string
-	size uint32
+	Name string
+	Size uint32
 
-	localeFlags uint32
-	fileDataID  uint32
+	LocaleFlags uint32
+	FileDataID  uint32
 
-	encodingKey [md5.Size]byte
+	EncodingKey [md5.Size]byte
 }
 
 func FileList(r io.Reader) (map[string]*File, error) {
@@ -46,11 +46,11 @@ func FileList(r io.Reader) (map[string]*File, error) {
 
 		fn := C.GoString(f.name)
 		out[fn] = &File{
-			name:        fn,
-			size:        uint32(f.size),
-			localeFlags: uint32(f.localeFlags),
-			fileDataID:  uint32(f.fileDataID),
-			encodingKey: *((*[16]byte)(unsafe.Pointer(&f.encodingKey))),
+			Name:        fn,
+			Size:        uint32(f.size),
+			LocaleFlags: uint32(f.localeFlags),
+			FileDataID:  uint32(f.fileDataID),
+			EncodingKey: *((*[16]byte)(unsafe.Pointer(&f.encodingKey))),
 		}
 	}
 
