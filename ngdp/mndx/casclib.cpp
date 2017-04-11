@@ -59,7 +59,7 @@ void FreeTheThings(struct mndx_file* files, uint32_t fileCount) {
 }
 
 int DoTheThing(void* pbRootFile, uint32_t cbRootFile, struct mndx_file** files, uint32_t* fileCount) {
-	auto hs = new TCascStorage;
+	TCascStorage* hs = new TCascStorage;
 	int rc = RootHandler_CreateMNDX(hs, (LPBYTE)pbRootFile, cbRootFile);
 	if (rc != ERROR_SUCCESS) {
 		return rc;
@@ -67,11 +67,11 @@ int DoTheThing(void* pbRootFile, uint32_t cbRootFile, struct mndx_file** files, 
 
 	// Calculate the total number of files
 	DWORD fileNameCount = 0;
-	auto mndxHandler = static_cast<TRootHandler_MNDX*>(hs->pRootHandler);
+	TRootHandler_MNDX* mndxHandler = static_cast<TRootHandler_MNDX*>(hs->pRootHandler);
 	mndxHandler->MndxInfo.pMarFile3->pDatabasePtr->GetFileNameCount(&fileNameCount);
 
 	// Allocate output buffer
-	auto outBuf = static_cast<struct mndx_file*>(calloc(fileNameCount, sizeof(struct mndx_file)));
+	struct mndx_file* outBuf = static_cast<struct mndx_file*>(calloc(fileNameCount, sizeof(struct mndx_file)));
 
 	TCascSearch *pSearch = (TCascSearch*)calloc(1, sizeof(TCascSearch) + 1024);
 	pSearch->szClassName = "TCascSearch";
