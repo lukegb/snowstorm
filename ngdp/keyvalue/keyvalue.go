@@ -18,6 +18,7 @@ package keyvalue
 
 import (
 	"bufio"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"reflect"
@@ -108,12 +109,31 @@ func setValue(f reflect.Value, value string) error {
 	switch {
 	case f.Kind() == reflect.String:
 		f.SetString(value)
-	case f.Kind() == reflect.Slice && f.Type().Elem().Kind() == reflect.String:
+	case f.Kind() == reflect.Slice && f.Type().Elem().Kind() == reflect.Uint8:
+		// interpret as hex
+		vh, err := hex.DecodeString(value)
+		if err != nil {
+			return err
+		}
+		f.Set(reflect.ValueOf(vh))
+	case f.Kind() == reflect.Array && f.Type().Elem().Kind() == reflect.Uint8:
+		// interpret as hex
+		vh, err := hex.DecodeString(value)
+		if err != nil {
+			return err
+		}
+
+		for n := f.Len() - 1; n >= 0 && n >= f.Len()-len(vh); n-- {
+			f.Index(n).SetUint(uint64(vh[n]))
+		}
+	case f.Kind() == reflect.Slice:
 		bits := strings.Split(value, " ")
 
 		slice := reflect.MakeSlice(f.Type(), len(bits), len(bits))
 		for n, v := range bits {
-			slice.Index(n).SetString(v)
+			if err := setValue(slice.Index(n), v); err != nil {
+				return err
+			}
 		}
 		f.Set(slice)
 	case f.Kind() >= reflect.Int && f.Kind() <= reflect.Int64:

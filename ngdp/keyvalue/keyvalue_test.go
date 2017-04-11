@@ -24,6 +24,7 @@ import (
 )
 
 type MaybeAString string
+type MaybeAByteSlice []byte
 
 func TestDecode(t *testing.T) {
 	type Embedded struct {
@@ -31,14 +32,16 @@ func TestDecode(t *testing.T) {
 		Right string
 	}
 	type T struct {
-		String               string
-		StringWithCustomName string `keyvalue:"swcn"`
-		SliceOfString        []string
-		SliceOfMaybeAString  []MaybeAString
-		Uint                 uint64
-		Int                  int64
-		Embedded             Embedded
-		unexported           string
+		String                 string
+		StringWithCustomName   string `keyvalue:"swcn"`
+		SliceOfString          []string
+		SliceOfMaybeAString    []MaybeAString
+		SliceOfSliceOfByte     [][]byte
+		SliceOfMaybeAByteSlice []MaybeAByteSlice
+		Uint                   uint64
+		Int                    int64
+		Embedded               Embedded
+		unexported             string
 	}
 
 	in := `# ignored line
@@ -46,18 +49,22 @@ string = blah
 swcn = blah2
 slice-of-string = blah1 blah2 blah3 blah4
 slice-of-maybe-a-string = blah1 blah2 blah3 blah4
+slice-of-slice-of-byte = 1234567890abcdef feedbeefcafe
+slice-of-maybe-a-byte-slice = 1234567890abcdef feedbeefcafe
 uint = 65536
 int = -300
 ignored-field = ignored
 embedded = left right
 `
 	want := T{
-		String:               "blah",
-		StringWithCustomName: "blah2",
-		SliceOfString:        []string{"blah1", "blah2", "blah3", "blah4"},
-		SliceOfMaybeAString:  []MaybeAString{"blah1", "blah2", "blah3", "blah4"},
-		Uint:                 65536,
-		Int:                  -300,
+		String:                 "blah",
+		StringWithCustomName:   "blah2",
+		SliceOfString:          []string{"blah1", "blah2", "blah3", "blah4"},
+		SliceOfMaybeAString:    []MaybeAString{"blah1", "blah2", "blah3", "blah4"},
+		SliceOfSliceOfByte:     [][]byte{[]byte{0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef}, []byte{0xfe, 0xed, 0xbe, 0xef, 0xca, 0xfe}},
+		SliceOfMaybeAByteSlice: []MaybeAByteSlice{MaybeAByteSlice{0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef}, MaybeAByteSlice{0xfe, 0xed, 0xbe, 0xef, 0xca, 0xfe}},
+		Uint: 65536,
+		Int:  -300,
 		Embedded: Embedded{
 			Left:  "left",
 			Right: "right",

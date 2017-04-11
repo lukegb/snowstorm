@@ -20,7 +20,8 @@ type ProgramCode string
 
 const (
 	// TODO(lukegb): include the rest once tested
-	ProgramHotS ProgramCode = "hero"
+	ProgramHotS     ProgramCode = "hero"
+	ProgramHotSTest ProgramCode = "herot"
 )
 
 type Region string

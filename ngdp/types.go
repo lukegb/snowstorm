@@ -16,14 +16,11 @@ limitations under the License.
 
 package ngdp
 
-import (
-	"crypto/md5"
-	"fmt"
-)
+import "crypto/md5"
 
-type CDNHash string
-type ContentHash string
+type CDNHash [md5.Size]byte
+type ContentHash [md5.Size]byte
 
 func EncodingKeyToContentHash(encKey [md5.Size]byte) ContentHash {
-	return ContentHash(fmt.Sprintf("%x", encKey))
+	return encKey
 }

@@ -17,6 +17,7 @@ limitations under the License.
 package client
 
 import (
+	"crypto/md5"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -198,6 +199,35 @@ func (c *Client) Version() (VersionInfo, error) {
 	return *c.cachedVersion, nil
 }
 
+// VersionHasChanged returns whether or not the version for the currently selected region has changed.
+func (c *Client) VersionHasChanged() (bool, VersionInfo, error) {
+	if c.cachedVersion == nil {
+		return false, VersionInfo{}, nil
+	}
+
+	versions, err := c.Versions()
+	if err != nil {
+		return false, VersionInfo{}, err
+	}
+
+	hasChanged := false
+	old := *c.cachedVersion
+	var new VersionInfo
+	for _, version := range versions {
+		if version.Region != c.region {
+			continue
+		}
+
+		new = version
+		if new.BuildConfig != old.BuildConfig || new.CDNConfig != old.CDNConfig {
+			hasChanged = true
+		}
+		break
+	}
+
+	return hasChanged, new, nil
+}
+
 // BuildConfig returns information about the current build config for the currently selected region.
 func (c *Client) BuildConfig() (BuildConfig, error) {
 	if err := c.Init(); err != nil {
@@ -374,7 +404,10 @@ func (c *Client) initArchiveIndices() error {
 						break
 					}
 
-					cdnHash := ngdp.CDNHash(fmt.Sprintf("%0x", hdr[0x0:0x10]))
+					var cdnHash ngdp.CDNHash
+					for n := 0; n < md5.Size; n++ {
+						cdnHash[n] = hdr[n]
+					}
 					size := binary.BigEndian.Uint32(hdr[0x10:0x14])
 					offset := binary.BigEndian.Uint32(hdr[0x14:0x18])
 
@@ -403,7 +436,7 @@ func (c *Client) initArchiveIndices() error {
 func (c *Client) cdnURLs(contentType ngdp.ContentType, cdnHash ngdp.CDNHash, suffix string) ([]string, error) {
 	urls := make([]string, len(c.cachedCDN.Hosts))
 	for n, host := range c.cachedCDN.Hosts {
-		urls[n] = fmt.Sprintf("http://%s/%s/%s/%s/%s/%s%s", host, c.cachedCDN.Path, contentType, cdnHash[0:2], cdnHash[2:4], cdnHash, suffix)
+		urls[n] = fmt.Sprintf("http://%s/%s/%s/%02x/%02x/%032x%s", host, c.cachedCDN.Path, contentType, cdnHash[0], cdnHash[1], cdnHash, suffix)
 	}
 	return urls, nil
 }

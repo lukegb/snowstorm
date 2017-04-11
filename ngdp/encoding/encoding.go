@@ -19,7 +19,6 @@ package encoding
 import (
 	"crypto/md5"
 	"encoding/binary"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -94,19 +93,14 @@ func sliceToHash(b []byte) hash {
 }
 
 func (m *Mapper) ToCDNHash(contentHash ngdp.ContentHash) (ngdp.CDNHash, error) {
-	contentHashSlice, err := hex.DecodeString(string(contentHash))
-	if err != nil {
-		return "", err
-	}
-
-	cdnHashes := m.keyMap[sliceToHash(contentHashSlice)]
+	cdnHashes := m.keyMap[hash(contentHash)]
 	if cdnHashes == nil {
-		return "", ErrUnknownContentHash
+		return ngdp.CDNHash{}, ErrUnknownContentHash
 	} else if len(cdnHashes) != 1 {
-		return "", ErrTooManyContentHashes
+		return ngdp.CDNHash{}, ErrTooManyContentHashes
 	}
 
-	return ngdp.CDNHash(fmt.Sprintf("%x", cdnHashes[0])), nil
+	return ngdp.CDNHash(cdnHashes[0]), nil
 }
 
 func (m *Mapper) init(r io.Reader) error {
