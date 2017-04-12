@@ -37,9 +37,11 @@ var (
 // A TreeDents is a sort.Interface of TreeDirectoryEntry structs.
 type TreeDents []*TreeDirectoryEntry
 
-func (td TreeDents) Len() int           { return len(td) }
-func (td TreeDents) Less(i, j int) bool { return td[i].Name < td[j].Name }
-func (td TreeDents) Swap(i, j int)      { td[i], td[j] = td[j], td[i] }
+func (td TreeDents) Len() int { return len(td) }
+func (td TreeDents) Less(i, j int) bool {
+	return strings.ToLower(td[i].Name) < strings.ToLower(td[j].Name)
+}
+func (td TreeDents) Swap(i, j int) { td[i], td[j] = td[j], td[i] }
 
 // A TreeDirectoryEntry is a directory entry, either a nested directory or a file.
 type TreeDirectoryEntry struct {
@@ -81,6 +83,9 @@ func newTreeDirectory() *TreeDirectory {
 // Get returns a TreeDirectoryEntry for a given /-separated path.
 func (td *TreeDirectory) Get(filePath string) (TreeDirectoryEntry, error) {
 	filePath = strings.TrimLeft(path.Clean(filePath), "/")
+	if filePath == "" {
+		return *td.asEntry(""), nil
+	}
 	tde, err := td.get(strings.Split(filePath, "/"))
 	if err != nil {
 		return TreeDirectoryEntry{}, err
