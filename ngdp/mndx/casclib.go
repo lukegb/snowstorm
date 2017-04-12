@@ -14,6 +14,7 @@ import (
 	"github.com/lukegb/snowstorm/ngdp"
 )
 
+// A File contains file metadata, including its content hash.
 type File struct {
 	Name string
 	Size uint32
@@ -24,8 +25,10 @@ type File struct {
 	EncodingKey ngdp.ContentHash
 }
 
+// A FilenameMap maps file paths to their corresponding File.
 type FilenameMap map[string]*File
 
+// ToContentHash returns the content hash for a given file path.
 func (m FilenameMap) ToContentHash(fn string) (h ngdp.ContentHash, ok bool) {
 	f, ok := m[fn]
 	if !ok {
@@ -34,7 +37,10 @@ func (m FilenameMap) ToContentHash(fn string) (h ngdp.ContentHash, ok bool) {
 	return f.EncodingKey, true
 }
 
-func Parse(r io.Reader) (ngdp.FilenameMapper, error) {
+// Parse parses the provided MNDX file and returns a FilenameMap.
+//
+// The MNDX file should not be BLTE-encoded.
+func Parse(r io.Reader) (FilenameMap, error) {
 	buf, err := ioutil.ReadAll(r)
 	if err != nil {
 		return nil, err

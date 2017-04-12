@@ -24,6 +24,7 @@ import (
 	"strings"
 )
 
+// Error constants
 var (
 	ErrDirFileNameClash = errors.New(`mndx: file and directory have clashing names`)
 	ErrExists           = errors.New(`mndx: file has clashing name`)
@@ -31,12 +32,14 @@ var (
 	ErrNotADirectory    = errors.New(`mndx: not a directory`)
 )
 
+// A TreeDents is a sort.Interface of TreeDirectoryEntry structs.
 type TreeDents []*TreeDirectoryEntry
 
 func (td TreeDents) Len() int           { return len(td) }
 func (td TreeDents) Less(i, j int) bool { return td[i].Name < td[j].Name }
 func (td TreeDents) Swap(i, j int)      { td[i], td[j] = td[j], td[i] }
 
+// A TreeDirectoryEntry is a directory entry, either a nested directory or a file.
 type TreeDirectoryEntry struct {
 	Name string
 
@@ -44,6 +47,7 @@ type TreeDirectoryEntry struct {
 	File      *TreeFile
 }
 
+// A TreeDirectory is a container for TreeDirectory or TreeFile structs, which can be addressed by their name.
 type TreeDirectory struct {
 	dents     map[string]*TreeDirectoryEntry
 	flatDents []*TreeDirectoryEntry
@@ -72,6 +76,7 @@ func newTreeDirectory() *TreeDirectory {
 	}
 }
 
+// Get returns a TreeDirectoryEntry for a given /-separated path.
 func (td *TreeDirectory) Get(filePath string) (TreeDirectoryEntry, error) {
 	filePath = strings.TrimLeft(path.Clean(filePath), "/")
 	tde, err := td.get(strings.Split(filePath, "/"))
@@ -147,6 +152,7 @@ func (td *TreeDirectory) addFile(f *File, name string) (*TreeFile, error) {
 	return dent.File, nil
 }
 
+// A TreeFile contains the metadata for a file, including its CDN hash.
 type TreeFile struct {
 	Size uint32
 
@@ -175,7 +181,8 @@ func (tf *TreeFile) asEntry(name string) *TreeDirectoryEntry {
 	}
 }
 
-func FileListToTree(fileMap map[string]*File) (*TreeDirectory, error) {
+// ToTree takes a FilenameMap and converts it into a tree structure.
+func ToTree(fileMap FilenameMap) (*TreeDirectory, error) {
 	root := newTreeDirectory()
 
 	for filePath, file := range fileMap {

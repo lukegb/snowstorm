@@ -16,16 +16,25 @@ limitations under the License.
 
 package ngdp
 
+// A ProgramCode is a reference to a particular game or game release channel.
+//
+// Blizzard tracks release and PTR as separate program codes, even though they usually refer to the same underlying CDN storage.
 type ProgramCode string
 
 const (
-	// TODO(lukegb): include the rest once tested
-	ProgramHotS     ProgramCode = "hero"
+	// ProgramHotS is the ProgramCode for Heroes of the Storm.
+	ProgramHotS ProgramCode = "hero"
+
+	// ProgramHotSTest is the ProgramCode for the PTR of Heroes of the Storm.
 	ProgramHotSTest ProgramCode = "herot"
 )
 
+// A Region is a reference to a game region, and is used for finding the nearest CDNs.
+//
+// In most cases, Akamai and Level3 are used anyway - China being the main exception.
 type Region string
 
+// The region codes below are all the ones used for Heroes of the Storm which are known at the time of writing.
 const (
 	RegionUnitedStates Region = "us"
 	RegionEurope       Region = "eu"
@@ -35,10 +44,12 @@ const (
 	RegionSingapore    Region = "sg"
 )
 
-var DefaultRegion = RegionEurope
-
+// A ContentType is a type of thing stored on the CDN.
+//
+// Each separate content type is stored under a different directory.
 type ContentType string
 
+// The content types below are believed to be exhaustive.
 const (
 	ContentTypeConfig ContentType = "config"
 	ContentTypeData   ContentType = "data"

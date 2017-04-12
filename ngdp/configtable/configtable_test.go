@@ -198,7 +198,7 @@ func TestDecodeComplexExample(t *testing.T) {
 		Region        string
 		BuildConfig   string
 		CDNConfig     []byte
-		BuildId       int32
+		BuildID       int32 `configtable:"BuildId"`
 		VersionsName  string
 		ProductConfig [16]byte
 		OtherNumber   uint32

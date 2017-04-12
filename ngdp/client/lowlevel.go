@@ -31,6 +31,7 @@ var (
 	suffixVersions = "versions"
 )
 
+// A LowLevelClient provides simple wrappers to make basic NGDP operations easier.
 type LowLevelClient struct {
 	Client *http.Client
 }

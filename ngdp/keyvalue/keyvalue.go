@@ -29,7 +29,10 @@ import (
 
 var (
 	fieldNameRegexp = regexp.MustCompile(`[\p{Lu}][^\p{Lu}]*`)
+)
 
+// Error constants
+var (
 	ErrNotStructPointer = fmt.Errorf("keyvalue: cannot decode into non-struct-pointer")
 )
 
@@ -47,6 +50,7 @@ func convertFieldName(s string) string {
 	return strings.Join(bits, "-")
 }
 
+// Decode decodes a file containing key-value pairs into a given interface.
 func Decode(ir io.Reader, s interface{}) error {
 	if reflect.TypeOf(s).Kind() != reflect.Ptr {
 		return ErrNotStructPointer

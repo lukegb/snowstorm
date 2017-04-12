@@ -28,6 +28,7 @@ import (
 
 type hash [16]byte
 
+// Error constants
 var (
 	ErrBadMagic             = fmt.Errorf("encoding: bad magic")
 	ErrBadHashSize          = fmt.Errorf("encoding: bad hash size in header")
@@ -35,10 +36,14 @@ var (
 	ErrTooManyContentHashes = fmt.Errorf("encoding: multiple content hashes listed")
 )
 
+// A Mapper converts file content hashes into their corresponding CDN hashes.
 type Mapper struct {
 	keyMap map[hash][]hash
 }
 
+// NewMapper creates a new Mapper from a provided encoding file.
+//
+// The encoding file should not be in BLTE format - it should already have been decoded.
 func NewMapper(r io.Reader) (*Mapper, error) {
 	m := &Mapper{
 		keyMap: make(map[hash][]hash),
@@ -92,6 +97,9 @@ func sliceToHash(b []byte) hash {
 	return x
 }
 
+// ToCDNHash converts a content hash into a single CDN hash.
+//
+// It is possible for a single content hash to map to multiple CDN hashes. In this case, an error is thrown - the semantics of what multiple CDN hashes means is currently unclear.
 func (m *Mapper) ToCDNHash(contentHash ngdp.ContentHash) (ngdp.CDNHash, error) {
 	cdnHashes := m.keyMap[hash(contentHash)]
 	if cdnHashes == nil {

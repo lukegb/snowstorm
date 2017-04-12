@@ -33,9 +33,15 @@ import (
 )
 
 var (
-	ErrUnknownRegion  = errors.New("client: unknown region")
+	// ErrUnknownRegion means that the region is invalid.
+	ErrUnknownRegion = errors.New("client: unknown region")
+
+	// ErrUnknownProgram means that the supplied program code does not refer to a
+	// currently available Blizzard program.
 	ErrUnknownProgram = errors.New("client: unknown program")
 
+	// ErrNoFilenameMapper means that the Client has no FilenameMapper assigned to it.
+	// FilenameMappers are program specific and must be added after calling client.New().
 	ErrNoFilenameMapper = errors.New("client: no filename mapper registered")
 )
 
@@ -50,6 +56,7 @@ func (e errBadStatus) Error() string {
 	return fmt.Sprintf("client: server status was \"%d %s\"; wanted \"%d %s\"", e.statusCode, e.status, e.wantedStatusCode, http.StatusText(e.wantedStatusCode))
 }
 
+// A Client provides a nice interface to interacting with NGDP, to make retrieving individual files easy.
 type Client struct {
 	LowLevelClient *LowLevelClient
 
@@ -208,6 +215,7 @@ func New(octx context.Context, program ngdp.ProgramCode, region ngdp.Region) (*C
 	}, nil
 }
 
+// Fetch retrieves a given file by the hash of its contents. After all, CASC is content-addressable storage.
 func (c *Client) Fetch(ctx context.Context, h ngdp.ContentHash) (io.ReadCloser, error) {
 	// Convert the content hash to a CDN hash.
 	cdnHash, err := c.EncodingMapper.ToCDNHash(h)
@@ -251,6 +259,10 @@ func (c *Client) Fetch(ctx context.Context, h ngdp.ContentHash) (io.ReadCloser, 
 	return newWrappedCloser(r, resp.Body), nil
 }
 
+// FetchFilename retrieves a given file by its filename.
+//
+// FetchFilename requires that a FilenameMapper has been registered.
+// For Heroes of the Storm, mndx.Decorate can be used to register an appropriate mapper.
 func (c *Client) FetchFilename(ctx context.Context, fn string) (io.ReadCloser, error) {
 	if c.FilenameMapper == nil {
 		return nil, ErrNoFilenameMapper

@@ -23,6 +23,9 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Decorate adds a FilenameMapper to the provided client.
+//
+// It will automatically download and parse the root file.
 func Decorate(ctx context.Context, c *client.Client) error {
 	root, err := c.Fetch(ctx, c.BuildConfig.Root)
 	if err != nil {
