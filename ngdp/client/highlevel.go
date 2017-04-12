@@ -111,18 +111,40 @@ func New(ctx context.Context, program ngdp.ProgramCode, region ngdp.Region) (*Cl
 	}, nil
 }
 
+// A Response is returned from retrieving a file.
+type Response struct {
+	// Body is the actual file itself. It must be closed when no longer needed.
+	Body io.ReadCloser
+
+	// ContentHash is the file's content hash.
+	ContentHash ngdp.ContentHash
+
+	// CDNHash is the *file's* CDN hash.
+	CDNHash ngdp.CDNHash
+
+	// RetrievedCDNHash is the CDN hash of the file which was actually retrieved.
+	// If the file was inside an archive, then this will be the archive's CDN hash.
+	RetrievedCDNHash ngdp.CDNHash
+}
+
 // Fetch retrieves a given file by the hash of its contents. After all, CASC is content-addressable storage.
-func (c *Client) Fetch(ctx context.Context, h ngdp.ContentHash) (io.ReadCloser, error) {
+func (c *Client) Fetch(ctx context.Context, h ngdp.ContentHash) (*Response, error) {
+	r := &Response{
+		ContentHash: h,
+	}
+
 	// Convert the content hash to a CDN hash.
 	cdnHash, err := c.EncodingMapper.ToCDNHash(h)
 	if err != nil {
 		return nil, err
 	}
+	r.CDNHash = cdnHash
 
 	// Check to see if this is inside an archive.
 	var resp *http.Response
 	if entry, ok := c.ArchiveMapper.Map(cdnHash); ok {
 		// We're inside an archive - make a Range request.
+		r.RetrievedCDNHash = entry.Archive
 		req, err := http.NewRequest(http.MethodGet, cdnURL(*c.CDNInfo, ngdp.ContentTypeData, entry.Archive, ""), nil)
 		if err != nil {
 			return nil, err
@@ -140,6 +162,7 @@ func (c *Client) Fetch(ctx context.Context, h ngdp.ContentHash) (io.ReadCloser, 
 		}
 	} else {
 		// We're not inside an archive, make a normal request.
+		r.RetrievedCDNHash = cdnHash
 		resp, err = c.LowLevelClient.get(ctx, *c.CDNInfo, ngdp.ContentTypeData, cdnHash, "")
 		if err != nil {
 			return nil, err
@@ -151,15 +174,15 @@ func (c *Client) Fetch(ctx context.Context, h ngdp.ContentHash) (io.ReadCloser, 
 	}
 
 	// Run the content through the BLTE decoder. It deserves it.
-	r := blte.NewReader(resp.Body)
-	return newWrappedCloser(r, resp.Body), nil
+	r.Body = newWrappedCloser(blte.NewReader(resp.Body), resp.Body)
+	return r, nil
 }
 
 // FetchFilename retrieves a given file by its filename.
 //
 // FetchFilename requires that a FilenameMapper has been registered.
 // For Heroes of the Storm, mndx.Decorate can be used to register an appropriate mapper.
-func (c *Client) FetchFilename(ctx context.Context, fn string) (io.ReadCloser, error) {
+func (c *Client) FetchFilename(ctx context.Context, fn string) (*Response, error) {
 	if c.FilenameMapper == nil {
 		return nil, ErrNoFilenameMapper
 	}

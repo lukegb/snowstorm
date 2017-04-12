@@ -31,9 +31,9 @@ func Decorate(ctx context.Context, c *client.Client) error {
 	if err != nil {
 		return errors.Wrap(err, "fetching root file")
 	}
-	defer root.Close()
+	defer root.Body.Close()
 
-	mapper, err := Parse(root)
+	mapper, err := Parse(root.Body)
 	if err != nil {
 		return errors.Wrap(err, "parsing root file")
 	}
