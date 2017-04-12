@@ -22,6 +22,8 @@ import (
 	"path"
 	"sort"
 	"strings"
+
+	"github.com/lukegb/snowstorm/ngdp"
 )
 
 // Error constants
@@ -84,6 +86,15 @@ func (td *TreeDirectory) Get(filePath string) (TreeDirectoryEntry, error) {
 		return TreeDirectoryEntry{}, err
 	}
 	return *tde, nil
+}
+
+// List returns everything contained within this directory.
+func (td *TreeDirectory) List() []TreeDirectoryEntry {
+	var o []TreeDirectoryEntry
+	for _, e := range td.flatDents {
+		o = append(o, *e)
+	}
+	return o
 }
 
 func (td *TreeDirectory) get(path []string) (*TreeDirectoryEntry, error) {
@@ -150,6 +161,20 @@ func (td *TreeDirectory) addFile(f *File, name string) (*TreeFile, error) {
 	td.dents[cname] = dent
 
 	return dent.File, nil
+}
+
+// ToContentHash returns the content hash for a given file path.
+func (d *TreeDirectory) ToContentHash(fn string) (h ngdp.ContentHash, ok bool) {
+	tde, err := d.Get(fn)
+	if err != nil {
+		return ngdp.ContentHash{}, false
+	}
+
+	if tde.File == nil {
+		return ngdp.ContentHash{}, false
+	}
+
+	return tde.File.EncodingKey, true
 }
 
 // A TreeFile contains the metadata for a file, including its CDN hash.

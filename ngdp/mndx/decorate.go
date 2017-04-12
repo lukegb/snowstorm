@@ -38,6 +38,11 @@ func Decorate(ctx context.Context, c *client.Client) error {
 		return errors.Wrap(err, "parsing root file")
 	}
 
-	c.FilenameMapper = mapper
+	tree, err := ToTree(mapper)
+	if err != nil {
+		return errors.Wrap(err, "converting to tree")
+	}
+
+	c.FilenameMapper = tree
 	return nil
 }
