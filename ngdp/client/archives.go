@@ -21,6 +21,7 @@ import (
 	"crypto/md5"
 	"encoding/binary"
 	"io"
+	"sort"
 
 	"golang.org/x/sync/errgroup"
 
@@ -34,6 +35,7 @@ const (
 )
 
 type archiveIndexEntry struct {
+	file    *ngdp.CDNHash
 	archive *ngdp.CDNHash
 	size    uint32
 	offset  uint32
@@ -47,9 +49,15 @@ func (ade archiveIndexEntry) asArchiveEntry() ArchiveEntry {
 	}
 }
 
+type archiveIndexEntries []archiveIndexEntry
+
+func (s archiveIndexEntries) Len() int           { return len(s) }
+func (s archiveIndexEntries) Less(i, j int) bool { return s[i].file.Less(*s[j].file) }
+func (s archiveIndexEntries) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+
 // An ArchiveMapper maps file CDN hashes to their location within the set of archives.
 type ArchiveMapper struct {
-	m map[ngdp.CDNHash]archiveIndexEntry
+	m []archiveIndexEntry
 }
 
 // An ArchiveEntry contains the location of a given file within the archive set.
@@ -63,12 +71,14 @@ type ArchiveEntry struct {
 //
 // If the file does not exist in any known archives, then ok will be false.
 func (e *ArchiveMapper) Map(in ngdp.CDNHash) (entry ArchiveEntry, ok bool) {
-	ade, ok := e.m[in]
-	if !ok {
-		return ArchiveEntry{}, false
+	i := sort.Search(len(e.m), func(n int) bool {
+		return !e.m[n].file.Less(in)
+	})
+	if i < len(e.m) && e.m[i].file.Equal(in) {
+		return e.m[i].asArchiveEntry(), true
 	}
 
-	return ade.asArchiveEntry(), true
+	return ArchiveEntry{}, false
 }
 
 func buildArchiveMap(ctx context.Context, llc *LowLevelClient, cdnInfo ngdp.CDNInfo, archiveHash ngdp.CDNHash) (map[ngdp.CDNHash]archiveIndexEntry, error) {
@@ -117,6 +127,7 @@ func buildArchiveMap(ctx context.Context, llc *LowLevelClient, cdnInfo ngdp.CDNI
 			offset := binary.BigEndian.Uint32(entry[0x14:0x18])
 
 			m[cdnHash] = archiveIndexEntry{
+				file:    &cdnHash,
 				archive: &archiveHash,
 				size:    size,
 				offset:  offset,
@@ -177,17 +188,29 @@ func (llc *LowLevelClient) NewArchiveMapper(ctx context.Context, cdnInfo ngdp.CD
 	}()
 
 	// Process results.
-	m := make(map[ngdp.CDNHash]archiveIndexEntry)
+	var slcs [][]archiveIndexEntry
+	count := 0
 	for miniMap := range resultChan {
-		for k, v := range miniMap {
-			m[k] = v
+		slc := make([]archiveIndexEntry, 0, len(miniMap))
+		for _, v := range miniMap {
+			slc = append(slc, v)
 		}
+		slcs = append(slcs, slc)
+		count += len(miniMap)
 	}
+
+	// Produce final.
+	final := make(archiveIndexEntries, 0, count)
+	for _, slc := range slcs {
+		final = append(final, slc...)
+	}
+	slcs = nil
+	sort.Sort(final)
 
 	// Check if there was an error.
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
 
-	return &ArchiveMapper{m}, nil
+	return &ArchiveMapper{final}, nil
 }
