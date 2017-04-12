@@ -18,11 +18,42 @@ package ngdp
 
 import "crypto/md5"
 
+type hash [md5.Size]byte
+
+// Equal checks two hashes for equality.
+func (h hash) Equal(o hash) bool {
+	for n := 0; n < md5.Size; n++ {
+		if h[n] != o[n] {
+			return false
+		}
+	}
+	return true
+}
+
+// Less checks if a given hash is less than another.
+func (h hash) Less(o hash) bool {
+	for n := 0; n < md5.Size; n++ {
+		if h[n] < o[n] {
+			return true
+		}
+		if h[n] > o[n] {
+			return false
+		}
+	}
+	return false
+}
+
 // A CDNHash is usually an MD5 hash of the BLTE header of a data file. Blizzard uses these to generate filenames for storage on the CDN.
-type CDNHash [md5.Size]byte
+type CDNHash hash
+
+func (h CDNHash) Equal(o CDNHash) bool { return hash(h).Equal(hash(o)) }
+func (h CDNHash) Less(o CDNHash) bool  { return hash(h).Less(hash(o)) }
 
 // A ContentHash is an MD5 hash of the raw contents of a file, before it is BLTE-encoded. These must be looked up in the encoding table to get a CDNHash before files can be downloaded.
-type ContentHash [md5.Size]byte
+type ContentHash hash
+
+func (h ContentHash) Equal(o ContentHash) bool { return hash(h).Equal(hash(o)) }
+func (h ContentHash) Less(o ContentHash) bool  { return hash(h).Less(hash(o)) }
 
 // A CDNInfo contains information on which CDNs hold data for which regions, as well as what path the data is stored under.
 type CDNInfo struct {
