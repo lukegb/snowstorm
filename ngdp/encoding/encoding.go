@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"sort"
 
 	"github.com/lukegb/snowstorm/ngdp"
 )
@@ -30,24 +31,27 @@ type hash [16]byte
 
 // Error constants
 var (
-	ErrBadMagic             = fmt.Errorf("encoding: bad magic")
-	ErrBadHashSize          = fmt.Errorf("encoding: bad hash size in header")
-	ErrUnknownContentHash   = fmt.Errorf("encoding: unknown content hash")
-	ErrTooManyContentHashes = fmt.Errorf("encoding: multiple content hashes listed")
+	ErrBadMagic           = fmt.Errorf("encoding: bad magic")
+	ErrBadHashSize        = fmt.Errorf("encoding: bad hash size in header")
+	ErrUnknownContentHash = fmt.Errorf("encoding: unknown content hash")
+	ErrTooManyCDNHashes   = fmt.Errorf("encoding: multiple CDN hashes listed")
 )
+
+type mapEntry struct {
+	contentHash ngdp.ContentHash
+	cdnHashes   []ngdp.CDNHash
+}
 
 // A Mapper converts file content hashes into their corresponding CDN hashes.
 type Mapper struct {
-	keyMap map[hash][]hash
+	keys []mapEntry
 }
 
 // NewMapper creates a new Mapper from a provided encoding file.
 //
 // The encoding file should not be in BLTE format - it should already have been decoded.
 func NewMapper(r io.Reader) (*Mapper, error) {
-	m := &Mapper{
-		keyMap: make(map[hash][]hash),
-	}
+	m := &Mapper{}
 	if err := m.init(r); err != nil {
 		return nil, err
 	}
@@ -101,14 +105,17 @@ func sliceToHash(b []byte) hash {
 //
 // It is possible for a single content hash to map to multiple CDN hashes. In this case, an error is thrown - the semantics of what multiple CDN hashes means is currently unclear.
 func (m *Mapper) ToCDNHash(contentHash ngdp.ContentHash) (ngdp.CDNHash, error) {
-	cdnHashes := m.keyMap[hash(contentHash)]
-	if cdnHashes == nil {
+	i := sort.Search(len(m.keys), func(n int) bool {
+		return !m.keys[n].contentHash.Less(contentHash)
+	})
+	if i >= len(m.keys) || !m.keys[i].contentHash.Equal(contentHash) {
 		return ngdp.CDNHash{}, ErrUnknownContentHash
-	} else if len(cdnHashes) != 1 {
-		return ngdp.CDNHash{}, ErrTooManyContentHashes
 	}
-
-	return ngdp.CDNHash(cdnHashes[0]), nil
+	x := m.keys[i]
+	if len(x.cdnHashes) != 1 {
+		return ngdp.CDNHash{}, ErrTooManyCDNHashes
+	}
+	return x.cdnHashes[0], nil
 }
 
 func (m *Mapper) init(r io.Reader) error {
@@ -134,6 +141,8 @@ func (m *Mapper) init(r io.Reader) error {
 		}
 	}
 
+	var slc []mapEntry
+
 	// Read key table entries
 	buf = make([]byte, 4096)
 	for n := uint32(0); n < h.sizeA; n++ {
@@ -157,17 +166,23 @@ func (m *Mapper) init(r io.Reader) error {
 			if cdnKeyCount == 0x0 {
 				break
 			}
-			contentHash := sliceToHash(keybuf[0x06:0x16])
+			contentHash := ngdp.ContentHash(sliceToHash(keybuf[0x06:0x16]))
 			keybuf = keybuf[0x16:]
-			cdnKeys := make([]hash, cdnKeyCount)
+			cdnKeys := make([]ngdp.CDNHash, cdnKeyCount)
 			for x := uint16(0); x < cdnKeyCount; x++ {
-				cdnKeys[x] = sliceToHash(keybuf[:0x10])
+				cdnKeys[x] = ngdp.CDNHash(sliceToHash(keybuf[:0x10]))
 				keybuf = keybuf[0x10:]
 			}
 
-			m.keyMap[contentHash] = cdnKeys
+			slc = append(slc, mapEntry{
+				contentHash: contentHash,
+				cdnHashes:   cdnKeys,
+			})
 		}
 	}
+
+	m.keys = make([]mapEntry, len(slc))
+	copy(m.keys, slc)
 
 	// Skip over layout table index and entries
 	if _, err := io.CopyN(ioutil.Discard, r, int64(h.sizeB*32)); err != nil {
