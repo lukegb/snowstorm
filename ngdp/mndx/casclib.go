@@ -6,11 +6,12 @@ package mndx
 // #include "casclib.h"
 import "C"
 import (
-	"crypto/md5"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"unsafe"
+
+	"github.com/lukegb/snowstorm/ngdp"
 )
 
 type File struct {
@@ -20,10 +21,20 @@ type File struct {
 	LocaleFlags uint32
 	FileDataID  uint32
 
-	EncodingKey [md5.Size]byte
+	EncodingKey ngdp.ContentHash
 }
 
-func FileList(r io.Reader) (map[string]*File, error) {
+type FilenameMap map[string]*File
+
+func (m FilenameMap) ToContentHash(fn string) (h ngdp.ContentHash, ok bool) {
+	f, ok := m[fn]
+	if !ok {
+		return ngdp.ContentHash{}, false
+	}
+	return f.EncodingKey, true
+}
+
+func Parse(r io.Reader) (ngdp.FilenameMapper, error) {
 	buf, err := ioutil.ReadAll(r)
 	if err != nil {
 		return nil, err
@@ -50,12 +61,12 @@ func FileList(r io.Reader) (map[string]*File, error) {
 			Size:        uint32(f.size),
 			LocaleFlags: uint32(f.localeFlags),
 			FileDataID:  uint32(f.fileDataID),
-			EncodingKey: *((*[16]byte)(unsafe.Pointer(&f.encodingKey))),
+			EncodingKey: *((*ngdp.ContentHash)(unsafe.Pointer(&f.encodingKey))),
 		}
 	}
 
 	C.free(cbuf)
 	C.FreeTheThings(filesPtr, cFileCount)
 
-	return out, nil
+	return FilenameMap(out), nil
 }

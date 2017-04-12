@@ -21,6 +21,57 @@ import "crypto/md5"
 type CDNHash [md5.Size]byte
 type ContentHash [md5.Size]byte
 
-func EncodingKeyToContentHash(encKey [md5.Size]byte) ContentHash {
-	return encKey
+type CDNInfo struct {
+	Name       Region
+	Path       string
+	Hosts      []string
+	ConfigPath string // unknown purpose
+}
+
+type VersionInfo struct {
+	Region        Region
+	BuildConfig   CDNHash
+	CDNConfig     CDNHash
+	BuildID       int `configtable:"BuildId"`
+	VersionsName  string
+	ProductConfig CDNHash
+}
+
+type BuildConfigEncoding struct {
+	ContentHash ContentHash
+	CDNHash     CDNHash
+}
+
+type BuildConfigEncodingSize struct {
+	UncompressedSize uint64
+	CompressedSize   uint64
+}
+
+type BuildConfig struct {
+	Root ContentHash
+
+	Install     ContentHash
+	InstallSize uint64
+
+	Download     ContentHash
+	DownloadSize uint64
+
+	Encoding     BuildConfigEncoding
+	EncodingSize BuildConfigEncodingSize
+
+	Patch       ContentHash
+	PatchSize   uint64
+	PatchConfig CDNHash
+}
+
+type CDNConfig struct {
+	Archives     []CDNHash
+	ArchiveGroup CDNHash
+
+	PatchArchives     []CDNHash
+	PatchArchiveGroup CDNHash
+}
+
+type FilenameMapper interface {
+	ToContentHash(fn string) (h ContentHash, ok bool)
 }
