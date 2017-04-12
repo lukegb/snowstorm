@@ -41,6 +41,9 @@ var (
 	// ErrNoFilenameMapper means that the Client has no FilenameMapper assigned to it.
 	// FilenameMappers are program specific and must be added after calling client.New().
 	ErrNoFilenameMapper = errors.New("client: no filename mapper registered")
+
+	// ErrNotExists means that the requested file does not exist.
+	ErrNotExists = errors.New("client: no such file")
 )
 
 type errBadStatus struct {
@@ -163,7 +166,7 @@ func (c *Client) FetchFilename(ctx context.Context, fn string) (io.ReadCloser, e
 
 	h, ok := c.FilenameMapper.ToContentHash(fn)
 	if !ok {
-		return nil, fmt.Errorf("client: no such file: %v", fn)
+		return nil, ErrNotExists
 	}
 
 	return c.Fetch(ctx, h)
